@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OutbreakXplr — Outbreaks, Historical Pandemics & BSL Lab Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<style>
+  :root {
+    --bg: #0a0e14; --panel: #0f1620; --border: #1e293b; --text: #e2e8f0;
+    --muted: #94a3b8; --blue: #3b82f6; --cyan: #06b6d4; --amber: #f59e0b;
+    --red: #ef4444; --green: #22c55e; --purple: #a78bfa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Inter, system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+  header { height: 52px; background: linear-gradient(90deg,#0a0e14,#0f172a); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 14px; gap: 10px; flex-shrink: 0; }
+  .logo { font-weight: 700; font-size: 1.15rem; color: var(--cyan); letter-spacing: -0.02em; }
+  .logo span { color: var(--blue); }
+  .status-pill { font-size: .68rem; padding: 3px 8px; border-radius: 999px; background: #132033; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+  .status-pill.live { border-color: var(--green); color: var(--green); }
+  .status-pill.warn { border-color: var(--amber); color: var(--amber); }
+  .spacer { flex: 1; }
+  button { background: #1e293b; border: 1px solid var(--border); color: var(--text); padding: 6px 11px; border-radius: 6px; cursor: pointer; font-size: .76rem; }
+  button:hover { background: #334155; border-color: var(--blue); }
+  button.active, .quick.active { background: var(--blue); border-color: var(--blue); }
+  .main { flex: 1; display: grid; grid-template-columns: 300px 1fr 300px; min-height: 0; }
+  @media (max-width: 1100px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar, .alerts { display: none; position: absolute; z-index: 900; top: 52px; height: calc(100% - 78px); width: min(340px, 92vw); }
+    .sidebar.open, .alerts.open { display: block; }
+  }
+  .sidebar, .alerts { background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; padding: 12px; }
+  .alerts { border-right: none; border-left: 1px solid var(--border); }
+  .panel-title { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 12px 0 6px; }
+  .filter-group { margin-bottom: 10px; }
+  label { display: block; font-size: .66rem; color: var(--muted); margin-bottom: 3px; }
+  input, select { width: 100%; background: #0a0e14; border: 1px solid var(--border); color: var(--text); padding: 7px 9px; border-radius: 6px; font-size: .8rem; }
+  .quick-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .quick { font-size: .7rem; padding: 4px 8px; }
+  .state-chip { font-size: .72rem; padding: 5px 10px; font-weight: 600; }
+  .state-chip.active { background: var(--cyan); border-color: var(--cyan); color: #0a0e14; }
+  .state-bar { background: #0a0e14; border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin-bottom: 10px; }
+  .state-bar .panel-title { margin-top: 0; }
+  #map { height: 100%; width: 100%; background: #0a0e14; }
+  .map-wrap { position: relative; min-height: 0; }
+  .layer-bar { position: absolute; top: 10px; left: 10px; z-index: 800; display: flex; gap: 6px; flex-wrap: wrap; }
+  .stats-bar { position: absolute; top: 10px; right: 10px; z-index: 800; background: rgba(15,22,32,.94); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: .7rem; max-width: 280px; line-height: 1.4; }
+  .stats-bar strong { color: var(--cyan); }
+  .table-wrap { position: absolute; bottom: 0; left: 0; right: 0; max-height: 38%; background: rgba(10,14,20,.97); border-top: 1px solid var(--border); overflow: auto; z-index: 700; }
+  table { width: 100%; border-collapse: collapse; font-size: .74rem; }
+  th, td { padding: 5px 8px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { position: sticky; top: 0; background: #0f1620; cursor: pointer; color: var(--cyan); user-select: none; }
+  tr:hover { background: #132033; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: .6rem; font-weight: 600; }
+  .badge.current { background: #7f1d1d; color: #fecaca; }
+  .badge.historical { background: #1e3a5f; color: #93c5fd; }
+  .badge.who { background: #164e63; color: #a5f3fc; }
+  .badge.cdc { background: #1e3a8a; color: #bfdbfe; }
+  .badge.measles { background: #581c87; color: #e9d5ff; }
+  .badge.covid { background: #1e3a8a; color: #bfdbfe; }
+  .alert-item { background: #0a0e14; border: 1px solid var(--border); border-radius: 8px; padding: 9px; margin-bottom: 7px; cursor: pointer; }
+  .alert-item:hover { border-color: var(--amber); }
+  .alert-item.high { border-left: 3px solid var(--red); }
+  .alert-title { font-weight: 600; font-size: .8rem; margin-bottom: 2px; }
+  .alert-meta { font-size: .66rem; color: var(--muted); }
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 2000; align-items: center; justify-content: center; padding: 16px; }
+  .modal.open { display: flex; }
+  .modal-content { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; max-width: 720px; max-height: 85vh; overflow-y: auto; padding: 18px; }
+  .modal-content h2 { margin-bottom: 10px; color: var(--cyan); font-size: 1.05rem; }
+  .footer-bar { height: 26px; background: #0a0e14; border-top: 1px solid var(--border); font-size: .62rem; color: var(--muted); display: flex; align-items: center; padding: 0 12px; gap: 12px; flex-shrink: 0; }
+  .leaflet-popup-content-wrapper { background: #0f1620; color: #e2e8f0; border-radius: 8px; }
+  .leaflet-popup-tip { background: #0f1620; }
+  .hint { font-size: .65rem; color: var(--muted); line-height: 1.35; margin-top: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Outbreak<span>Xplr</span></div>
+  <div class="status-pill live" id="livePill">LOADING</div>
+  <div class="status-pill" id="lastUpdate">—</div>
+  <div class="spacer"></div>
+  <button id="btnRefresh" title="Re-fetch local data files">Reload data</button>
+  <button id="btnToggleTable">Table</button>
+  <button id="btnSidebar" class="mobile-only">Filters</button>
+  <button id="btnAlerts" class="mobile-only">Alerts</button>
+</header>
+
+<div class="main">
+  <aside class="sidebar" id="sidebar">
+    <div class="panel-title">Quick filters</div>
+    <div class="quick-row">
+      <button class="quick" data-q="measles">Measles</button>
+      <button class="quick" data-q="covid">COVID</button>
+      <button class="quick" data-q="current">Current</button>
+      <button class="quick" data-q="historical">Historical</button>
+      <button class="quick" data-q="nors">NORS</button>
+      <button class="quick" data-q="jhu">JHU measles</button>
+      <button class="quick" data-q="wwscan">Wastewater</button>
+      <button class="quick" data-q="all">All</button>
+    </div>
+
+    <div class="state-bar">
+      <div class="panel-title">Quick states / USA</div>
+      <div class="quick-row" id="stateChips">
+        <button class="quick state-chip" data-state="USA">USA</button>
+        <button class="quick state-chip" data-state="PA">PA</button>
+        <button class="quick state-chip" data-state="NJ">NJ</button>
+        <button class="quick state-chip" data-state="DE">DE</button>
+        <button class="quick state-chip" data-state="CA">CA</button>
+        <button class="quick state-chip" data-state="FL">FL</button>
+        <button class="quick state-chip" data-state="NY">NY</button>
+      </div>
+      <p class="hint" style="margin-top:6px;margin-bottom:0">One click loads all outbreak, measles, COVID, NORS, and exposure records for that state (or national USA). Full state list is below.</p>
+    </div>
+
+    <div class="panel-title">University / academic feeds</div>
+    <p class="hint" style="margin-top:0"><strong>Loaded on this map:</strong> JHU county measles (purple), WastewaterSCAN detections (teal), Nextstrain genomic context. Click any marker for a floating popup → <em>Open full record</em> for the detail window. External links below are optional deep-dives only.</p>
+    <div class="quick-row">
+      <a class="quick" style="text-decoration:none;color:var(--text)" href="https://publichealth.jhu.edu/ivac/resources/us-measles-tracker" target="_blank" rel="noopener">JHU Tracker</a>
+      <a class="quick" style="text-decoration:none;color:var(--text)" href="https://data.wastewaterscan.org/" target="_blank" rel="noopener">WastewaterSCAN</a>
+      <a class="quick" style="text-decoration:none;color:var(--text)" href="https://nextstrain.org/measles" target="_blank" rel="noopener">Nextstrain</a>
+      <a class="quick" style="text-decoration:none;color:var(--text)" href="https://www.pophive.org/" target="_blank" rel="noopener">Yale PopHIVE</a>
+      <a class="quick" style="text-decoration:none;color:var(--text)" href="https://healthmap.org/" target="_blank" rel="noopener">HealthMap</a>
+    </div>
+
+    <div class="panel-title">Search all fields</div>
+    <div class="filter-group">
+      <label>Full-text (disease, county, state, notes, source…)</label>
+      <input type="text" id="q" placeholder="measles, exposure, Pennsylvania, salmonella…" />
+    </div>
+    <div class="filter-group">
+      <label>State</label>
+      <select id="state"><option value="">All States</option></select>
+    </div>
+    <div class="filter-group">
+      <label>County (contains)</label>
+      <input type="text" id="county" placeholder="County name" />
+    </div>
+    <div class="filter-group">
+      <label>Level</label>
+      <select id="level">
+        <option value="">All (Federal / State / County)</option>
+        <option value="federal">Federal / National</option>
+        <option value="state">State</option>
+        <option value="county">County</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Source</label>
+      <select id="source">
+        <option value="">All sources</option>
+        <option value="CDC NORS">CDC NORS</option>
+        <option value="CDC NNDSS">CDC NNDSS</option>
+        <option value="WHO DON">WHO DON</option>
+        <option value="HDX / WHO DON outbreaks">HDX / WHO DON outbreaks (global 1996–)</option>
+        <option value="WHO GHO">WHO GHO</option>
+        <option value="World Bank">World Bank indicators</option>
+        <option value="disease.sh">disease.sh (COVID)</option>
+        <option value="Historical">Historical anchors</option>
+        <option value="JHU Measles Tracker">JHU Measles Tracker</option>
+        <option value="WastewaterSCAN">WastewaterSCAN (Stanford/Emory)</option>
+        <option value="Nextstrain">Nextstrain</option>
+        <option value="Curated">Curated</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Status</label>
+      <select id="status">
+        <option value="">All</option>
+        <option value="current">Current</option>
+        <option value="historical">Historical</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Date from (YYYY-MM-DD)</label>
+      <input type="text" id="dateFrom" placeholder="2015-01-01" />
+    </div>
+    <div class="filter-group">
+      <label>Date to (YYYY-MM-DD)</label>
+      <input type="text" id="dateTo" placeholder="2026-12-31" />
+    </div>
+    <button id="btnApply" style="width:100%;background:var(--blue);border-color:var(--blue);">Apply filters</button>
+    <button id="btnReset" style="width:100%;margin-top:6px;">Reset</button>
+
+    <div class="panel-title">Map layers</div>
+    <label style="display:flex;gap:8px;align-items:center;margin:5px 0;font-size:.8rem;"><input type="checkbox" id="lyrOutbreaks" checked /> Outbreaks & cases</label>
+    <label style="display:flex;gap:8px;align-items:center;margin:5px 0;font-size:.8rem;"><input type="checkbox" id="lyrJHU" checked /> JHU measles (county)</label>
+    <label style="display:flex;gap:8px;align-items:center;margin:5px 0;font-size:.8rem;"><input type="checkbox" id="lyrWW" checked /> WastewaterSCAN detections</label>
+    <label style="display:flex;gap:8px;align-items:center;margin:5px 0;font-size:.8rem;"><input type="checkbox" id="lyrHD" checked /> Health department HQs</label>
+    <label style="display:flex;gap:8px;align-items:center;margin:5px 0;font-size:.8rem;"><input type="checkbox" id="lyrLabs" checked /> BSL laboratories</label>
+
+    <div class="panel-title">BSL lab filter</div>
+    <div class="filter-group">
+      <label>Max BSL level (official scale is 1–4 only)</label>
+      <select id="bslFilter">
+        <option value="">All public labs in dataset</option>
+        <option value="4">BSL-4 (max containment)</option>
+        <option value="3">BSL-3 and above</option>
+        <option value="2">BSL-2 and above</option>
+      </select>
+    </div>
+    <p class="hint" style="margin-top:4px;">
+      <strong>BSL-5 does not exist</strong> in CDC/NIH BMBL or WHO frameworks. Only BSL-1 through BSL-4 are official.
+      This map shows <em>publicly documented</em> major BSL-3/4 facilities (NIAID NBL/RBL network, federal, select university and international). There is no complete public registry of every BSL-1 teaching lab worldwide.
+    </p>
+
+    <p class="hint">
+      Outbreak data: local <code>data/outbreaks.json</code> (Action + historical anchors from antiquity to COVID/mpox).
+      Full-text search covers all fields. Labs: <code>data/labs.json</code>.
+    </p>
+  </aside>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="layer-bar">
+      <button id="btnFitUS">Fit USA</button>
+      <button id="btnFitWorld">World</button>
+    </div>
+    <div class="stats-bar" id="statsBar">
+      <div>Loading local data…</div>
+    </div>
+    <div class="table-wrap" id="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="date">Date</th>
+            <th data-sort="disease">Disease</th>
+            <th data-sort="location">Location</th>
+            <th data-sort="cases">Cases</th>
+            <th data-sort="level">Level</th>
+            <th data-sort="source">Source</th>
+            <th data-sort="status">Status</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <aside class="alerts" id="alertsPanel">
+    <div class="panel-title">Current alerts & exposures</div>
+    <div id="alertsList"></div>
+  </aside>
+</div>
+
+<div class="footer-bar">
+  <span>OutbreakXplr • Searchable current + historical outbreak intelligence</span>
+  <span id="countLabel">0 records</span>
+  <span>GitHub Pages • OSM tiles (no map API key)</span>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-content">
+    <h2 id="modalTitle"></h2>
+    <div id="modalBody"></div>
+    <button onclick="document.getElementById('modal').classList.remove('open')" style="margin-top:12px;">Close</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+const STATE_CENTROIDS = {
+  AL:[32.8,-86.8],AK:[64.2,-152.5],AZ:[34.3,-111.7],AR:[34.9,-92.4],CA:[37.2,-119.4],CO:[39.0,-105.5],
+  CT:[41.6,-72.7],DE:[39.0,-75.5],FL:[28.1,-81.7],GA:[32.7,-83.5],HI:[20.3,-156.4],ID:[44.4,-114.6],
+  IL:[40.0,-89.2],IN:[39.9,-86.3],IA:[42.0,-93.5],KS:[38.5,-98.3],KY:[37.5,-85.3],LA:[31.1,-92.0],
+  ME:[45.3,-69.2],MD:[39.0,-76.6],MA:[42.3,-71.8],MI:[44.3,-85.4],MN:[46.3,-94.3],MS:[32.7,-89.7],
+  MO:[38.4,-92.5],MT:[47.0,-110.0],NE:[41.5,-99.8],NV:[39.3,-116.6],NH:[43.7,-71.6],NJ:[40.2,-74.7],
+  NM:[34.4,-106.1],NY:[42.9,-75.5],NC:[35.6,-79.8],ND:[47.5,-100.5],OH:[40.3,-82.8],OK:[35.6,-97.5],
+  OR:[44.0,-120.5],PA:[40.9,-77.2],RI:[41.7,-71.5],SC:[33.9,-80.9],SD:[44.4,-100.2],TN:[35.9,-86.4],
+  TX:[31.5,-99.3],UT:[39.3,-111.7],VT:[44.1,-72.7],VA:[37.5,-78.9],WA:[47.4,-120.5],WV:[38.6,-80.6],
+  WI:[44.6,-89.8],WY:[43.0,-107.6],DC:[38.9,-77.0]
+};
+
+const HEALTH_DEPTS = [
+  {name:"CDC HQ", lat:33.799, lng:-84.328, state:"GA", url:"https://www.cdc.gov"},
+  {name:"Alabama Dept of Public Health", lat:32.377, lng:-86.300, state:"AL", url:"https://www.alabamapublichealth.gov"},
+  {name:"California Dept of Public Health", lat:38.576, lng:-121.493, state:"CA", url:"https://www.cdph.ca.gov"},
+  {name:"New York State Dept of Health", lat:42.652, lng:-73.756, state:"NY", url:"https://www.health.ny.gov"},
+  {name:"Texas Dept of State Health Services", lat:30.274, lng:-97.740, state:"TX", url:"https://www.dshs.texas.gov"},
+  {name:"Florida Dept of Health", lat:30.438, lng:-84.280, state:"FL", url:"https://www.floridahealth.gov"},
+  {name:"Georgia Dept of Public Health", lat:33.749, lng:-84.388, state:"GA", url:"https://dph.georgia.gov"},
+  {name:"Pennsylvania Dept of Health", lat:40.264, lng:-76.884, state:"PA", url:"https://www.health.pa.gov"},
+  {name:"WHO HQ (Geneva)", lat:46.233, lng:6.134, state:"", url:"https://www.who.int"},
+  {name:"USAMRIID (Fort Detrick)", lat:39.435, lng:-77.427, state:"MD", url:"https://usamriid.health.mil"}
+];
+
+let allData = [];
+let filtered = [];
+let allLabs = [];
+let filteredLabs = [];
+let meta = null;
+let map, cluster, hdLayer, labLayer;
+let sortKey = "date", sortDir = -1;
+
+function initMap() {
+  map = L.map("map", { zoomControl: true }).setView([39.8, -98.5], 4);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+  cluster = L.markerClusterGroup({ maxClusterRadius: 40, showCoverageOnHover: false });
+  hdLayer = L.layerGroup();
+  labLayer = L.layerGroup();
+  HEALTH_DEPTS.forEach(h => {
+    L.circleMarker([h.lat, h.lng], {
+      radius: 6, color: "#06b6d4", fillColor: "#0e7490", fillOpacity: 0.9, weight: 2
+    }).bindPopup(`<strong>${h.name}</strong><br>${h.state || "International"}<br><a href="${h.url}" target="_blank" rel="noopener">Website</a>`)
+      .addTo(hdLayer);
+  });
+  hdLayer.addTo(map);
+  labLayer.addTo(map);
+  cluster.addTo(map);
+}
+
+function renderLabs() {
+  labLayer.clearLayers();
+  const minBsl = parseInt(document.getElementById("bslFilter")?.value || "", 10) || 0;
+  filteredLabs = allLabs.filter(lab => {
+    if (!minBsl) return true;
+    return (lab.maxBsl || Math.max(...(lab.bsl || [0]))) >= minBsl;
+  });
+  filteredLabs.forEach(lab => {
+    const maxB = lab.maxBsl || Math.max(...(lab.bsl || [1]));
+    const color = maxB >= 4 ? "#ef4444" : maxB >= 3 ? "#f59e0b" : "#22c55e";
+    const m = L.circleMarker([lab.lat, lab.lng], {
+      radius: maxB >= 4 ? 10 : 8,
+      color, fillColor: color, fillOpacity: 0.85, weight: 2
+    });
+    const programs = (lab.programs || []).map(p => `• ${p}`).join("<br>");
+    m.bindPopup(
+      `<strong>${esc(lab.name)}</strong><br>` +
+      `${esc(lab.org)}<br>` +
+      `<span style="color:${color}">BSL ${ (lab.bsl||[]).join("/") } (max ${maxB})</span><br>` +
+      `${esc(lab.city)}${lab.state ? ", " + lab.state : ""} ${lab.country || ""}<br>` +
+      `<em>${esc(lab.type || "")}</em><br><br>` +
+      `<strong>Capabilities</strong><br>${esc(lab.capabilities || "—")}<br><br>` +
+      `<strong>Programs</strong><br>${programs || "—"}<br><br>` +
+      (lab.url ? `<a href="${lab.url}" target="_blank" rel="noopener">Public website</a><br>` : "") +
+      `<button onclick="showLab('${lab.id}')" style="margin-top:6px;">Full lab record</button>`
+    );
+    labLayer.addLayer(m);
+  });
+}
+
+function markerStyle(d) {
+  let color = "#3b82f6", radius = 6;
+  if (d.source === "JHU Measles Tracker") { color = "#c026d3"; radius = 8; }
+  else if (d.source === "WastewaterSCAN") { color = "#14b8a6"; radius = 7; }
+  else if (d.source === "Nextstrain") { color = "#a78bfa"; radius = 9; }
+  else if (d.source === "HDX / WHO DON outbreaks") { color = "#f59e0b"; radius = 5; }
+  else if (/measles/i.test(d.disease)) { color = d.status === "current" ? "#e879f9" : "#a78bfa"; radius = 7; }
+  else if (/covid/i.test(d.disease)) { color = "#2563eb"; radius = 6; }
+  else if (d.status === "current") { color = "#ef4444"; radius = 7; }
+  return { color, radius };
+}
+
+function valueLabel(d) {
+  if (d.source === "WastewaterSCAN") {
+    return d.cases != null ? Number(d.cases).toLocaleString(undefined, { maximumFractionDigits: 1 }) + " conc." : "detected";
+  }
+  if (d.source === "Nextstrain") return d.cases != null ? Number(d.cases).toLocaleString() + " genomes" : "genomic build";
+  return d.cases != null ? Number(d.cases).toLocaleString() + " cases" : "—";
+}
+
+function popupHtml(d) {
+  const st = markerStyle(d);
+  return `<div style="min-width:200px">
+    <div style="font-weight:700;color:${st.color};margin-bottom:4px">${esc(d.disease)}</div>
+    <div>${esc(d.location || "")}</div>
+    <div style="margin-top:6px;font-size:12px;line-height:1.45">
+      <b>Date:</b> ${d.date || "—"}<br>
+      <b>Value:</b> ${valueLabel(d)}<br>
+      <b>Level:</b> ${esc(d.level || "—")} · <b>Status:</b> ${esc(d.status || "—")}<br>
+      <b>Source:</b> ${esc(d.source)}
+    </div>
+    <button onclick="showAlert('${d.id}')" style="margin-top:8px;width:100%;background:#3b82f6;border:none;color:#fff;padding:6px;border-radius:6px;cursor:pointer">Open full record</button>
+  </div>`;
+}
+
+function renderMarkers() {
+  cluster.clearLayers();
+  const showJHU = document.getElementById("lyrJHU")?.checked !== false;
+  const showWW = document.getElementById("lyrWW")?.checked !== false;
+  const showGen = document.getElementById("lyrOutbreaks")?.checked !== false;
+  const forMap = filtered.filter(d => {
+    if (d.lat == null || d.lng == null) return false;
+    if (d.source === "JHU Measles Tracker") return showJHU;
+    if (d.source === "WastewaterSCAN") return showWW;
+    return showGen;
+  }).slice(0, 3000);
+  forMap.forEach(d => {
+    const { color, radius } = markerStyle(d);
+    const m = L.circleMarker([d.lat, d.lng], {
+      radius, color, fillColor: color, fillOpacity: 0.85, weight: 1
+    });
+    m.bindPopup(popupHtml(d), { maxWidth: 320 });
+    m.on("click", () => { /* popup opens; full modal via button */ });
+    cluster.addLayer(m);
+  });
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+}
+
+async function loadLocalData() {
+  document.getElementById("livePill").textContent = "LOADING";
+  document.getElementById("livePill").className = "status-pill warn";
+  try {
+    const [outbreaksRes, metaRes, labsRes, histRes] = await Promise.all([
+      fetch("data/outbreaks.json", { cache: "no-store" }),
+      fetch("data/meta.json", { cache: "no-store" }),
+      fetch("data/labs.json", { cache: "no-store" }),
+      fetch("data/historical-outbreaks.json", { cache: "no-store" })
+    ]);
+    if (!outbreaksRes.ok) throw new Error("outbreaks.json " + outbreaksRes.status);
+    allData = await outbreaksRes.json();
+    meta = metaRes.ok ? await metaRes.json() : null;
+    allLabs = labsRes.ok ? await labsRes.json() : [];
+    if (histRes.ok) {
+      const hist = await histRes.json();
+      const ids = new Set(allData.map(d => d.id));
+      allData = [...allData, ...hist.filter(h => !ids.has(h.id))];
+    }
+    document.getElementById("livePill").textContent = "LOCAL DATA";
+    document.getElementById("livePill").className = "status-pill live";
+    document.getElementById("lastUpdate").textContent =
+      meta?.finishedAt ? "Data " + new Date(meta.finishedAt).toLocaleString() : "Local JSON loaded";
+  } catch (e) {
+    console.warn("Local data load failed, using empty set:", e);
+    allData = [];
+    allLabs = [];
+    document.getElementById("livePill").textContent = "NO DATA";
+    document.getElementById("livePill").className = "status-pill warn";
+    document.getElementById("lastUpdate").textContent = "Run GitHub Action or scripts/fetch-outbreak-data.mjs";
+  }
+  applyFilters();
+  renderLabs();
+  updateStats();
+}
+
+function updateStats() {
+  const el = document.getElementById("statsBar");
+  const mCount = allData.filter(d => /measles/i.test(d.disease)).length;
+  const cCount = allData.filter(d => /covid/i.test(d.disease)).length;
+  const cur = allData.filter(d => d.status === "current").length;
+  const hist = allData.filter(d => d.source === "Historical" || d.status === "historical").length;
+  const natMeasles = allData.find(d => d.id === "m-nat-2026");
+  const bsl4 = allLabs.filter(l => (l.maxBsl || 0) >= 4).length;
+  el.innerHTML = `
+    <div><strong>Outbreak records</strong>: ${(allData.length).toLocaleString()}</div>
+    <div><strong>Measles</strong>: ${mCount.toLocaleString()}${natMeasles?.cases != null ? ` (2026 US ~${Number(natMeasles.cases).toLocaleString()})` : ""}</div>
+    <div><strong>COVID</strong>: ${cCount.toLocaleString()} · <strong>Historical anchors</strong>: ${hist.toLocaleString()}</div>
+    <div><strong>BSL labs mapped</strong>: ${allLabs.length} (BSL-4: ${bsl4})</div>
+    <div id="filterCount">${filtered.length.toLocaleString()} outbreaks shown</div>
+  `;
+}
+
+function applyFilters() {
+  const q = (document.getElementById("q").value || "").toLowerCase().trim();
+  const st = document.getElementById("state").value;
+  const cty = (document.getElementById("county").value || "").toLowerCase();
+  const src = document.getElementById("source").value;
+  const status = document.getElementById("status").value;
+  const level = document.getElementById("level").value;
+  const df = document.getElementById("dateFrom").value;
+  const dt = document.getElementById("dateTo").value;
+
+  filtered = allData.filter(d => {
+    if (q) {
+      const blob = [d.disease, d.location, d.state, d.county, d.source, d.level, d.status, d.text]
+        .join(" ").toLowerCase();
+      if (!blob.includes(q)) return false;
+    }
+    if (st === "USA") {
+      const loc = (d.location || "").toLowerCase();
+      const usSources = ["CDC NORS", "CDC NNDSS", "disease.sh"];
+      const hasState = !!d.state;
+      const usText = /united states|\busa\b|u\.s\.|u\.s\.a/.test(loc);
+      const curatedUS = d.source === "Curated" && (hasState || usText);
+      if (!(hasState || usText || usSources.includes(d.source) || curatedUS)) return false;
+    } else if (st) {
+      if (d.state === st) { /* match */ }
+      else {
+        const loc = (d.location || "").toUpperCase();
+        const names = {
+          PA: "PENNSYLVANIA", NJ: "NEW JERSEY", DE: "DELAWARE", CA: "CALIFORNIA", FL: "FLORIDA",
+          NY: "NEW YORK", TX: "TEXAS", OH: "OHIO", GA: "GEORGIA", NC: "NORTH CAROLINA",
+          MI: "MICHIGAN", IL: "ILLINOIS", VA: "VIRGINIA", WA: "WASHINGTON", AZ: "ARIZONA",
+          MA: "MASSACHUSETTS", MD: "MARYLAND", CO: "COLORADO", WI: "WISCONSIN"
+        };
+        const full = names[st];
+        if (!(full && loc.includes(full))) return false;
+      }
+    }
+    if (cty && !(d.county || "").toLowerCase().includes(cty)) return false;
+    if (src && d.source !== src) return false;
+    if (status && d.status !== status) return false;
+    if (level && d.level !== level) return false;
+    if (df && d.date && d.date < df) return false;
+    if (dt && d.date && d.date > dt) return false;
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    let va = a[sortKey], vb = b[sortKey];
+    if (sortKey === "cases") { va = Number(va) || 0; vb = Number(vb) || 0; }
+    if (va == null) va = "";
+    if (vb == null) vb = "";
+    if (va < vb) return -1 * sortDir;
+    if (va > vb) return 1 * sortDir;
+    return 0;
+  });
+
+  renderTable();
+  renderMarkers();
+  renderAlerts();
+  document.getElementById("countLabel").textContent = filtered.length.toLocaleString() + " / " + allData.length.toLocaleString() + " records";
+  const fc = document.getElementById("filterCount");
+  if (fc) {
+    const st = document.getElementById("state").value;
+    const label = st ? (st === "USA" ? "USA" : st) + ": " : "";
+    const measlesN = filtered.filter(d => /measles/i.test(d.disease)).length;
+    const covidN = filtered.filter(d => /covid/i.test(d.disease)).length;
+    fc.textContent = label + filtered.length.toLocaleString() + " records · measles " + measlesN + " · COVID " + covidN;
+  }
+}
+
+function renderTable() {
+  // Show first 800 for DOM performance; full set remains searchable/filterable
+  const rows = filtered.slice(0, 800);
+  document.getElementById("tbody").innerHTML = rows.map(d => `
+    <tr onclick="showAlert('${d.id}')" style="cursor:pointer">
+      <td>${d.date || "—"}</td>
+      <td title="${esc(d.disease)}">${esc(d.disease.length > 42 ? d.disease.slice(0, 40) + "…" : d.disease)}</td>
+      <td title="${esc(d.location)}">${esc((d.location || "").length > 36 ? d.location.slice(0, 34) + "…" : (d.location || "—"))}</td>
+      <td>${d.cases != null ? (d.source === "WastewaterSCAN" ? Number(d.cases).toLocaleString(undefined,{maximumFractionDigits:0}) + " c" : Number(d.cases).toLocaleString()) : "—"}</td>
+      <td>${esc(d.level || "—")}</td>
+      <td><span class="badge ${badgeClass(d)}">${esc(d.source)}</span></td>
+      <td><span class="badge ${d.status}">${d.status}</span></td>
+    </tr>
+  `).join("") + (filtered.length > 800
+    ? `<tr><td colspan="7" style="color:var(--muted);font-size:.7rem;">Showing 800 of ${filtered.length.toLocaleString()} — refine filters to narrow.</td></tr>`
+    : "");
+}
+
+function badgeClass(d) {
+  if (d.source === "JHU Measles Tracker") return "measles";
+  if (d.source === "WastewaterSCAN") return "who";
+  if (d.source === "Nextstrain") return "measles";
+  if (/measles/i.test(d.disease)) return "measles";
+  if (/covid/i.test(d.disease)) return "covid";
+  if (d.source && d.source.includes("WHO")) return "who";
+  if (d.source && d.source.includes("CDC")) return "cdc";
+  return "";
+}
+
+function renderAlerts() {
+  const list = document.getElementById("alertsList");
+  const alerts = filtered.filter(d => d.status === "current").slice(0, 40);
+  if (!alerts.length) {
+    list.innerHTML = "<div style='color:var(--muted);font-size:.78rem;'>No current records match filters.</div>";
+    return;
+  }
+  list.innerHTML = alerts.map(d => `
+    <div class="alert-item ${/measles|ebola|mers|exposure|outbreak/i.test(d.disease) ? "high" : ""}" onclick="showAlert('${d.id}')">
+      <div class="alert-title">${esc(d.disease)}</div>
+      <div class="alert-meta">${d.date || "—"} • ${esc(d.location || d.state || "")} • ${esc(d.source)}</div>
+    </div>
+  `).join("");
+}
+
+function showAlert(id) {
+  const d = allData.find(x => x.id === id);
+  if (!d) return;
+  document.getElementById("modalTitle").textContent = d.disease;
+  const isWW = d.source === "WastewaterSCAN";
+  const isJHU = d.source === "JHU Measles Tracker";
+  const valueTitle = isWW ? "Concentration / signal" : isJHU ? "Lab-confirmed cases" : "Cases / value";
+  const valueStr = d.cases != null
+    ? (isWW ? Number(d.cases).toLocaleString(undefined, { maximumFractionDigits: 2 }) : Number(d.cases).toLocaleString())
+    : "Not specified / exposure or summary record";
+  let extra = "";
+  if (isJHU) {
+    extra = `<p style="margin-top:8px;padding:8px;background:#1e1b4b;border-radius:6px;font-size:.8rem">
+      <strong>JHU CSSE/IVAC U.S. Measles Tracker</strong> — county-level lab-confirmed cases compiled from state and county health departments. Data is loaded into this map (not an external link only).
+    </p>`;
+  } else if (isWW) {
+    extra = `<p style="margin-top:8px;padding:8px;background:#042f2e;border-radius:6px;font-size:.8rem">
+      <strong>WastewaterSCAN</strong> (Stanford / Emory / Verily) via CDC NWSS. Pathogen nucleic-acid signal in municipal wastewater. Plotted at approximate county / plant region. CC BY-NC 4.0.
+    </p>`;
+  } else if (d.source === "Nextstrain") {
+    extra = `<p style="margin-top:8px;padding:8px;background:#2e1065;border-radius:6px;font-size:.8rem">
+      <strong>Nextstrain</strong> genomic phylogeny context. Explore interactive trees at nextstrain.org/measles — this record marks the build on the map.
+    </p>`;
+  }
+  document.getElementById("modalBody").innerHTML = `
+    <p><strong>Date:</strong> ${d.date || "—"}</p>
+    <p><strong>Location:</strong> ${esc(d.location || ((d.state || "") + (d.county ? ", " + d.county : "")))}</p>
+    <p><strong>${valueTitle}:</strong> ${valueStr}</p>
+    <p><strong>Level:</strong> ${esc(d.level || "—")} &nbsp;•&nbsp; <strong>Source:</strong> ${esc(d.source)} &nbsp;•&nbsp; <strong>Status:</strong> ${d.status}</p>
+    <p><strong>Coordinates:</strong> ${d.lat != null ? d.lat.toFixed(3) + ", " + d.lng.toFixed(3) : "—"}</p>
+    ${extra}
+    <hr style="border-color:var(--border);margin:12px 0;">
+    <p style="line-height:1.55;white-space:pre-wrap">${esc(d.text || "No additional text.")}</p>
+  `;
+  document.getElementById("modal").classList.add("open");
+  // Center map on record when opened from table
+  if (d.lat != null && d.lng != null && map) {
+    map.panTo([d.lat, d.lng]);
+  }
+}
+window.showAlert = showAlert;
+
+function showLab(id) {
+  const lab = allLabs.find(x => x.id === id);
+  if (!lab) return;
+  const maxB = lab.maxBsl || Math.max(...(lab.bsl || [1]));
+  document.getElementById("modalTitle").textContent = lab.name;
+  document.getElementById("modalBody").innerHTML = `
+    <p><strong>Organization:</strong> ${esc(lab.org)}</p>
+    <p><strong>Type:</strong> ${esc(lab.type || "—")}</p>
+    <p><strong>Location:</strong> ${esc(lab.city)}${lab.state ? ", " + lab.state : ""} ${lab.country || ""}</p>
+    <p><strong>BSL levels:</strong> ${(lab.bsl || []).join(", ")} (maximum BSL-${maxB})</p>
+    <p><strong>Capabilities:</strong> ${esc(lab.capabilities || "—")}</p>
+    <p><strong>Programs / focus areas:</strong></p>
+    <ul style="margin:6px 0 10px 18px;line-height:1.45">${(lab.programs || []).map(p => `<li>${esc(p)}</li>`).join("") || "<li>—</li>"}</ul>
+    <p style="color:var(--muted);font-size:.85rem">${esc(lab.notes || "")}</p>
+    ${lab.url ? `<p><a href="${lab.url}" target="_blank" rel="noopener">Public website / reference</a></p>` : ""}
+    <p style="margin-top:12px;font-size:.75rem;color:var(--muted)">Publicly documented information only. Operational inventories of select agents and detailed floor plans are not published.</p>
+  `;
+  document.getElementById("modal").classList.add("open");
+}
+window.showLab = showLab;
+
+function populateStates() {
+  const sel = document.getElementById("state");
+  const usa = document.createElement("option");
+  usa.value = "USA"; usa.textContent = "USA (national + all states)";
+  sel.appendChild(usa);
+  Object.keys(STATE_CENTROIDS).sort().forEach(s => {
+    const o = document.createElement("option");
+    o.value = s; o.textContent = s;
+    sel.appendChild(o);
+  });
+}
+
+document.getElementById("btnApply").onclick = applyFilters;
+document.getElementById("btnReset").onclick = () => {
+  ["q", "county", "dateFrom", "dateTo"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("state").value = "";
+  document.getElementById("source").value = "";
+  document.getElementById("status").value = "";
+  document.getElementById("level").value = "";
+  document.querySelectorAll(".quick").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".state-chip").forEach(b => b.classList.remove("active"));
+  applyFilters();
+  if (map) map.setView([39.8, -98.5], 4);
+};
+document.getElementById("btnRefresh").onclick = loadLocalData;
+document.getElementById("btnFitUS").onclick = () => map.setView([39.8, -98.5], 4);
+document.getElementById("btnFitWorld").onclick = () => map.setView([20, 0], 2);
+document.getElementById("btnToggleTable").onclick = () => {
+  const el = document.getElementById("tableWrap");
+  el.style.display = el.style.display === "none" ? "block" : "none";
+};
+document.getElementById("lyrOutbreaks").onchange = () => renderMarkers();
+document.getElementById("lyrJHU").onchange = () => renderMarkers();
+document.getElementById("lyrWW").onchange = () => renderMarkers();
+document.getElementById("lyrHD").onchange = e => {
+  if (e.target.checked) hdLayer.addTo(map); else map.removeLayer(hdLayer);
+};
+document.getElementById("lyrLabs").onchange = e => {
+  if (e.target.checked) labLayer.addTo(map); else map.removeLayer(labLayer);
+};
+document.getElementById("bslFilter").onchange = () => renderLabs();
+
+document.querySelectorAll(".quick:not(.state-chip)").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".quick:not(.state-chip)").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const v = btn.dataset.q;
+    document.getElementById("q").value = "";
+    document.getElementById("status").value = "";
+    document.getElementById("source").value = "";
+    if (v === "measles") document.getElementById("q").value = "measles";
+    else if (v === "covid") document.getElementById("q").value = "covid";
+    else if (v === "current") document.getElementById("status").value = "current";
+    else if (v === "historical") document.getElementById("status").value = "historical";
+    else if (v === "nors") document.getElementById("source").value = "CDC NORS";
+    else if (v === "jhu") document.getElementById("source").value = "JHU Measles Tracker";
+    else if (v === "wwscan") document.getElementById("source").value = "WastewaterSCAN";
+    else if (v === "all") {
+      document.getElementById("state").value = "";
+      document.getElementById("source").value = "";
+      document.querySelectorAll(".state-chip").forEach(b => b.classList.remove("active"));
+    }
+    applyFilters();
+  };
+});
+
+const STATE_VIEWS = {
+  USA: { center: [39.8, -98.5], zoom: 4 },
+  PA: { center: [40.9, -77.2], zoom: 7 },
+  NJ: { center: [40.1, -74.7], zoom: 8 },
+  DE: { center: [39.0, -75.5], zoom: 9 },
+  CA: { center: [37.2, -119.5], zoom: 6 },
+  FL: { center: [28.1, -81.7], zoom: 7 },
+  NY: { center: [42.9, -75.5], zoom: 7 }
+};
+
+document.querySelectorAll(".state-chip").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".state-chip").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const code = btn.dataset.state;
+    document.getElementById("state").value = code === "USA" ? "USA" : code;
+    // Ensure dropdown has USA option
+    const sel = document.getElementById("state");
+    if (code === "USA" && ![...sel.options].some(o => o.value === "USA")) {
+      const o = document.createElement("option");
+      o.value = "USA"; o.textContent = "USA (national + all states)";
+      sel.insertBefore(o, sel.options[1] || null);
+    }
+    applyFilters();
+    const view = STATE_VIEWS[code];
+    if (view && map) map.setView(view.center, view.zoom);
+  };
+});
+
+// Keep state <select> in sync with chips
+document.getElementById("state").addEventListener("change", () => {
+  const v = document.getElementById("state").value;
+  document.querySelectorAll(".state-chip").forEach(b => {
+    b.classList.toggle("active", b.dataset.state === v || (v === "" && false));
+  });
+  applyFilters();
+  if (STATE_VIEWS[v] && map) map.setView(STATE_VIEWS[v].center, STATE_VIEWS[v].zoom);
+});
+
+document.querySelectorAll("th[data-sort]").forEach(th => {
+  th.onclick = () => {
+    const k = th.dataset.sort;
+    if (sortKey === k) sortDir *= -1;
+    else { sortKey = k; sortDir = -1; }
+    applyFilters();
+  };
+});
+
+// mobile panel toggles
+const btnSb = document.getElementById("btnSidebar");
+const btnAl = document.getElementById("btnAlerts");
+if (btnSb) btnSb.onclick = () => document.getElementById("sidebar").classList.toggle("open");
+if (btnAl) btnAl.onclick = () => document.getElementById("alertsPanel").classList.toggle("open");
+
+populateStates();
+initMap();
+loadLocalData();
+</script>
+</body>
+</html>

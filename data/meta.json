@@ -1,0 +1,51 @@
+{
+  "generatedAt": "2026-11-01T17:47:26.651Z",
+  "finishedAt": "2026-11-01T17:47:28.113Z",
+  "totalRecords": 5894,
+  "bySource": {
+    "disease.sh": 64,
+    "JHU Measles Tracker": 463,
+    "Curated": 18,
+    "Nextstrain": 1,
+    "WastewaterSCAN": 400,
+    "WHO DON": 40,
+    "CDC NNDSS": 400,
+    "HDX / WHO DON outbreaks": 3568,
+    "World Bank": 120,
+    "CDC NORS": 800,
+    "Historical": 20
+  },
+  "byStatus": {
+    "current": 2297,
+    "historical": 3597
+  },
+  "measlesCount": 1037,
+  "covidCount": 1283,
+  "sourcesIncorporated": {
+    "WHO Disease Outbreak News API": "live pull",
+    "WHO GHO OData API": "sample epidemic indicators",
+    "CDC NORS (Socrata 5xkq-dg7x)": "live pull",
+    "CDC NNDSS Weekly (measles filter)": "live pull",
+    "HDX Global Pandemic & Epidemic Outbreaks (WHO DON derived CSV)": "full country-year history 1996–present",
+    "disease.sh COVID-19": "US national + states",
+    "World Bank Indicators API": "TB incidence + measles immunization context",
+    "JHU CSSE/IVAC Measles Tracker (GitHub measles_data)": "county-level lab-confirmed measles",
+    "WastewaterSCAN via CDC NWSS (j9g8-acpt)": "recent pathogen detections in wastewater",
+    "Nextstrain measles": "genomic phylogeny context",
+    "Curated": "measles 2025–2026 + historical pandemic anchors + BSL labs"
+  },
+  "sourcesLinkedNotBulkAutomated": {
+    "WHO Outbreak Toolkit": "guidance/framework — not a case data feed",
+    "CDC Data Portal (2000+ datasets)": "catalog; specific Socrata endpoints added as needed",
+    "Global.health line lists": "requires free API key / account for bulk export",
+    "IDDO": "individual participant data — registration / data use agreements",
+    "GIDS": "no stable public bulk API identified",
+    "Figshare / Harvard Dataverse COVID collections": "research archives — not live outbreak feeds",
+    "HealthMap": "web UI; no stable free bulk API for redistribution",
+    "GIDEON": "commercial / premium database",
+    "Yale PopHIVE": "dashboard + some GitHub parquet; primary value is interactive UI",
+    "Brown Pandemic Center / Outbreak Observatory": "narrative synthesis reports, not bulk case API",
+    "UCSD DIRE": "projection models / dashboard, not open bulk outbreak events"
+  },
+  "notes": "Provisional surveillance data. NNDSS and NORS counts are subject to revision. COVID post-PHE reporting is incomplete. HDX dataset unit is country-year disease outbreak (WHO DON derived). World Bank rows are context indicators, not outbreak events."
+}
