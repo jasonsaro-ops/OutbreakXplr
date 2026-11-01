@@ -423,9 +423,22 @@ async function loadJSON(path) {
 
 async function boot() {
   map = L.map("map", { zoomControl: true, attributionControl: false }).setView([39.8, -98.5], 4);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 18, subdomains: "abcd"
-  }).addTo(map);
+  // Free tiles — no API key (Esri World Dark Gray + OSM fallback)
+  const esriDark = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 16, attribution: "Tiles © Esri" }
+  );
+  const osm = L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { maxZoom: 19, attribution: "© OpenStreetMap" }
+  );
+  esriDark.addTo(map);
+  esriDark.on("tileerror", () => {
+    if (!map.hasLayer(osm)) {
+      map.removeLayer(esriDark);
+      osm.addTo(map);
+    }
+  });
   cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 45, spiderfyOnEveryZoom: false });
   map.addLayer(cluster);
   hdLayer = L.layerGroup().addTo(map);
