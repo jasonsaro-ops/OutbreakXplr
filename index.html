@@ -75,7 +75,7 @@ header {
 .shell {
   flex: 1; min-height: 0; display: grid;
   grid-template-columns: 240px 1fr 300px;
-  grid-template-rows: 1fr 210px;
+  grid-template-rows: 1fr 230px;
 }
 .side {
   grid-row: 1 / 3; background: var(--panel2); border-right: 1px solid var(--border);
@@ -146,7 +146,16 @@ input, select {
 }
 .rank-row:hover { background: #15202b; }
 .rank-row .n { color: var(--muted); font-variant-numeric: tabular-nums; }
-.rank-row .c { font-weight: 600; font-variant-numeric: tabular-nums; }
+.rank-row .c { font-weight: 700; font-variant-numeric: tabular-nums; color: #f43f5e; text-align: right; min-width: 52px; }
+.rank-row .c.muted { color: var(--muted); font-weight: 600; }
+.sas-confirmed { color: #f43f5e; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sas-panel-title { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.sas-total {
+  font-size: 28px; font-weight: 800; color: #f43f5e; letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.sas-total-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; }
+
 .bar {
   height: 4px; background: #1e293b; border-radius: 2px; margin-top: 4px; overflow: hidden;
 }
@@ -168,7 +177,10 @@ input, select {
   font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
   margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;
 }
-#trendChart { width: 100%; height: 160px; }
+#trendChart { width: 100%; height: 180px; }
+.chart-box { min-height: 0; }
+.bottom { grid-template-rows: 1fr; }
+
 .table-scroll { flex: 1; overflow-x: hidden; overflow-y: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
 th, td {
@@ -299,6 +311,22 @@ tr:hover { background: #15202b; cursor: pointer; }
       </div>
       <label class="f">All states</label>
       <select id="state"><option value="">All</option></select>
+    </div>
+    <div class="sec">
+      <div class="sec-h">Virus / outbreak</div>
+      <select id="disease" style="font-size:12px">
+        <option value="">All viruses &amp; outbreaks</option>
+      </select>
+      <div class="row" style="margin-top:6px" id="diseaseQuick">
+        <button type="button" class="chip" data-disease="measles">Measles</button>
+        <button type="button" class="chip" data-disease="covid">COVID-19</button>
+        <button type="button" class="chip" data-disease="ebola">Ebola</button>
+        <button type="button" class="chip" data-disease="mpox">Mpox</button>
+        <button type="button" class="chip" data-disease="influenza">Influenza</button>
+        <button type="button" class="chip" data-disease="norovirus">Norovirus</button>
+        <button type="button" class="chip" data-disease="cholera">Cholera</button>
+        <button type="button" class="chip" data-disease="dengue">Dengue</button>
+      </div>
     </div>
     <div class="sec">
       <div class="sec-h">Search</div>
@@ -510,6 +538,7 @@ async function boot() {
   }
 
   populateStates();
+  populateDiseases();
   updateGlobalMetrics();
   applyFilters();
   renderLabs();
@@ -526,6 +555,50 @@ function populateStates() {
     o.value = s; o.textContent = s;
     sel.appendChild(o);
   });
+}
+
+function populateDiseases() {
+  const sel = document.getElementById("disease");
+  const counts = {};
+  allData.forEach(d => {
+    const k = (d.disease || "Unknown").trim();
+    if (!k) return;
+    counts[k] = (counts[k] || 0) + 1;
+  });
+  // Prefer known viral families first via optgroups
+  const groups = {
+    "Respiratory": [/covid/i, /influenza|flu/i, /rsv|respiratory syncytial/i, /sars/i, /mers/i, /pertussis|whooping/i],
+    "Vaccine-preventable": [/measles/i, /mumps/i, /rubella/i, /polio|poliomyelitis/i, /diphtheria/i, /meningococcal/i],
+    "Hemorrhagic / high-consequence": [/ebola/i, /marburg/i, /lassa/i, /crimean|cchf/i, /haemorrhagic|hemorrhagic/i],
+    "Vector-borne": [/dengue/i, /zika/i, /chikungunya/i, /yellow fever/i, /west nile/i, /malaria/i, /oropouche/i],
+    "Enteric / foodborne": [/norovirus/i, /salmonella/i, /cholera/i, /hepatitis a/i, /e\.?\s*coli|shiga/i],
+    "Other / wastewater": [/wastewater/i, /mpox|monkeypox/i, /plague/i, /tb incidence|tuberculosis/i]
+  };
+  const used = new Set();
+  Object.entries(groups).forEach(([label, patterns]) => {
+    const og = document.createElement("optgroup");
+    og.label = label;
+    Object.keys(counts).sort((a,b) => counts[b]-counts[a]).forEach(name => {
+      if (used.has(name)) return;
+      if (!patterns.some(rx => rx.test(name))) return;
+      used.add(name);
+      const o = document.createElement("option");
+      o.value = name;
+      o.textContent = `${name} (${counts[name]})`;
+      og.appendChild(o);
+    });
+    if (og.children.length) sel.appendChild(og);
+  });
+  const og2 = document.createElement("optgroup");
+  og2.label = "All other recorded conditions";
+  Object.keys(counts).sort((a,b) => counts[b]-counts[a]).forEach(name => {
+    if (used.has(name)) return;
+    const o = document.createElement("option");
+    o.value = name;
+    o.textContent = `${name} (${counts[name]})`;
+    og2.appendChild(o);
+  });
+  if (og2.children.length) sel.appendChild(og2);
 }
 
 function updateGlobalMetrics() {
@@ -554,8 +627,16 @@ function applyFilters() {
   const st = document.getElementById("state").value;
   const status = document.getElementById("status").value;
   const level = document.getElementById("level").value;
+  const disease = document.getElementById("disease").value;
+  const diseaseToken = document.getElementById("disease").dataset.token || "";
 
   filtered = allData.filter(d => {
+    if (diseaseToken) {
+      if (!(d.disease || "").toLowerCase().includes(diseaseToken.toLowerCase())) return false;
+    } else if (disease) {
+      const name = (d.disease || "").toLowerCase();
+      if (name !== disease.toLowerCase()) return false;
+    }
     if (q) {
       const blob = [d.disease, d.location, d.state, d.county, d.source, d.level, d.status, d.text].join(" ").toLowerCase();
       if (!blob.includes(q)) return false;
@@ -691,7 +772,7 @@ function renderTrend() {
   const canvas = document.getElementById("trendChart");
   const ctx = canvas.getContext("2d");
   const w = canvas.width = canvas.clientWidth * (window.devicePixelRatio || 1);
-  const h = canvas.height = 160 * (window.devicePixelRatio || 1);
+  const h = canvas.height = 180 * (window.devicePixelRatio || 1);
   ctx.clearRect(0, 0, w, h);
   const byYear = {};
   filtered.forEach(d => {
@@ -733,8 +814,29 @@ function renderTrend() {
     ctx.lineWidth = 2;
     ctx.stroke();
   }
-  path(years, y => byYear[y] || 0, "#3b82f6");
+  // Area fill under total series (SAS-style emphasis)
+  ctx.beginPath();
+  years.forEach((y, i) => {
+    const x = pad.l + (i / Math.max(years.length - 1, 1)) * iw;
+    const v = byYear[y] || 0;
+    const yy = h - pad.b - (v / max) * ih;
+    if (i === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+  });
+  const lastX = pad.l + iw;
+  ctx.lineTo(lastX, h - pad.b);
+  ctx.lineTo(pad.l, h - pad.b);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(244,63,94,0.12)";
+  ctx.fill();
+  path(years, y => byYear[y] || 0, "#f43f5e");
   path(years, y => measlesByYear[y] || 0, "#c084fc");
+  // in-chart legend
+  ctx.fillStyle = "#f43f5e"; ctx.fillRect(pad.l + 8, pad.t + 4, 10, 3);
+  ctx.fillStyle = "#8b9bb0"; ctx.font = `${10 * (window.devicePixelRatio || 1)}px sans-serif`;
+  ctx.fillText("Records", pad.l + 22, pad.t + 10);
+  ctx.fillStyle = "#c084fc"; ctx.fillRect(pad.l + 80, pad.t + 4, 10, 3);
+  ctx.fillStyle = "#8b9bb0";
+  ctx.fillText("Measles", pad.l + 94, pad.t + 10);
   ctx.fillStyle = "#8b9bb0";
   ctx.font = `${10 * (window.devicePixelRatio || 1)}px sans-serif`;
   [years[0], years[Math.floor(years.length / 2)], years[years.length - 1]].forEach((y, idx) => {
@@ -800,16 +902,25 @@ function renderRight() {
   });
   const ranked = Object.values(locMap).sort((a, b) => b.cases - a.cases || b.n - a.n).slice(0, 50);
   const maxC = Math.max(...ranked.map(r => r.cases), 1);
-  const jhuCases = filtered.filter(d => d.source === "JHU Measles Tracker").reduce((s, d) => s + (Number(d.cases) || 0), 0);
-  el.innerHTML = `<div class="mini-stat">
-    <div><div class="k">JHU measles cases</div><div class="v" style="color:var(--purple)">${jhuCases.toLocaleString()}</div></div>
-    <div><div class="k">Locations</div><div class="v">${ranked.length}</div></div>
-  </div>` + ranked.map((r, i) => `
+  const totalCases = filtered.reduce((s, d) => s + (Number(d.cases) || 0), 0);
+  const totalCurrent = filtered.filter(d => d.status === "current").length;
+  const diseaseLabel = document.getElementById("disease").value
+    || document.getElementById("disease").dataset.token
+    || "All outbreaks";
+  el.innerHTML = `
+    <div class="sas-total-label">Confirmed / reported value · ${esc(String(diseaseLabel))}</div>
+    <div class="sas-total">${totalCases ? totalCases.toLocaleString(undefined,{maximumFractionDigits:0}) : filtered.length.toLocaleString()}</div>
+    <div class="mini-stat" style="margin-top:10px">
+      <div><div class="k">Locations</div><div class="v">${ranked.length}</div></div>
+      <div><div class="k">Current signals</div><div class="v" style="color:var(--red)">${totalCurrent.toLocaleString()}</div></div>
+    </div>
+    <div class="sas-panel-title">By location (map-linked)</div>
+  ` + ranked.map((r, i) => `
     <div class="rank-row" data-id="${esc(r.sample.id)}">
       <span class="n">${i + 1}</span>
       <div>
         <div>${esc(r.name)}</div>
-        <div class="bar"><i style="width:${Math.round((r.cases / maxC) * 100)}%"></i></div>
+        <div class="bar"><i style="width:${Math.round((r.cases / maxC) * 100)}%;background:#f43f5e"></i></div>
       </div>
       <span class="c">${r.cases ? r.cases.toLocaleString() : r.n}</span>
     </div>`).join("");
@@ -876,6 +987,12 @@ function setFeed(feed) {
   renderRight();
 }
 
+function applyFiltersToken(token) {
+  document.getElementById("disease").dataset.token = token;
+  document.getElementById("disease").value = "";
+  applyFilters();
+}
+
 function openNextstrain() {
   const wrap = document.getElementById("nsFrameWrap");
   const frame = document.getElementById("nsFrame");
@@ -925,12 +1042,46 @@ function setMode(mode) {
 }
 
 function bindUI() {
-  document.getElementById("btnApply").onclick = applyFilters;
+  document.getElementById("disease").onchange = () => {
+    document.querySelectorAll("#diseaseQuick .chip").forEach(b => b.classList.remove("active"));
+    document.getElementById("disease").dataset.token = "";
+    applyFilters();
+  };
+  document.querySelectorAll("#diseaseQuick .chip").forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll("#diseaseQuick .chip").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      // map short token into disease filter via value that uses includes path
+      document.getElementById("disease").value = "";
+      // set disease to token so includes-path works (length <= 12)
+      const opt = document.createElement("option");
+      opt.value = btn.dataset.disease;
+      opt.textContent = btn.dataset.disease;
+      // temporary: set select to a matching full name if exists, else use token filter via q
+      const sel = document.getElementById("disease");
+      let matched = "";
+      [...sel.options].forEach(o => {
+        if (o.value && o.value.toLowerCase().includes(btn.dataset.disease)) {
+          if (!matched) matched = o.value;
+        }
+      });
+      // Use token filter: empty select + inject via custom
+      sel.value = "";
+      // Store token on select dataset
+      sel.dataset.token = btn.dataset.disease;
+      applyFiltersToken(btn.dataset.disease);
+    };
+  });
+  document.getElementById("btnApply").onclick = () => {
+    document.getElementById("disease").dataset.token = "";
+    applyFilters();
+  };
   document.getElementById("btnReset").onclick = () => {
     document.getElementById("q").value = "";
     document.getElementById("state").value = "";
     document.getElementById("status").value = "";
     document.getElementById("level").value = "";
+    document.getElementById("disease").value = "";
     document.querySelectorAll(".chip").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(".hdr-btn").forEach(b => b.classList.remove("active"));
     applyFilters();
