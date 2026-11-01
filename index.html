@@ -169,9 +169,18 @@ input, select {
   margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;
 }
 #trendChart { width: 100%; height: 160px; }
-.table-scroll { flex: 1; overflow: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.table-scroll { flex: 1; overflow-x: hidden; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+th, td {
+  padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+th:nth-child(1), td:nth-child(1) { width: 88px; }
+th:nth-child(2), td:nth-child(2) { width: 28%; }
+th:nth-child(3), td:nth-child(3) { width: 22%; }
+th:nth-child(4), td:nth-child(4) { width: 72px; }
+th:nth-child(5), td:nth-child(5) { width: 18%; }
+th:nth-child(6), td:nth-child(6) { width: 72px; }
 th { position: sticky; top: 0; background: #111820; color: var(--cyan); cursor: pointer; z-index: 1; }
 tr:hover { background: #15202b; cursor: pointer; }
 .badge {
@@ -227,6 +236,20 @@ tr:hover { background: #15202b; cursor: pointer; }
   .bottom { grid-column: 1; }
   .metrics { grid-template-columns: repeat(3, 1fr); }
 }
+/* Nextstrain immersive */
+.ns-frame-wrap {
+  display: none; position: absolute; inset: 0; z-index: 950; background: #fff;
+}
+.ns-frame-wrap.open { display: block; }
+.ns-frame-wrap iframe { width: 100%; height: 100%; border: 0; }
+.ns-bar {
+  position: absolute; top: 0; left: 0; right: 0; height: 40px; z-index: 960;
+  display: flex; align-items: center; gap: 10px; padding: 0 12px;
+  background: rgba(11,15,20,.92); border-bottom: 1px solid var(--border); color: #fff;
+  font-size: 12px;
+}
+.ns-bar button { background: #fff; color: #111; border: none; font-weight: 600; }
+.shell.ns-mode .map-pane { position: relative; }
 </style>
 </head>
 <body>
@@ -238,6 +261,7 @@ tr:hover { background: #15202b; cursor: pointer; }
   <button class="hdr-btn" data-mode="measles">Measles</button>
   <button class="hdr-btn" data-mode="covid">COVID</button>
   <button class="hdr-btn" data-mode="ww">Wastewater</button>
+  <button class="hdr-btn" data-mode="nextstrain">Nextstrain</button>
   <button class="hdr-btn" data-mode="all">All data</button>
 </header>
 
@@ -316,6 +340,16 @@ tr:hover { background: #15202b; cursor: pointer; }
 
   <div class="map-pane">
     <div id="map"></div>
+    <div class="ns-frame-wrap" id="nsFrameWrap">
+      <div class="ns-bar">
+        <span style="font-weight:600;color:#22d3ee">Nextstrain measles · full genome</span>
+        <span id="nsMeta" style="color:#8b9bb0"></span>
+        <div class="spacer"></div>
+        <button type="button" id="btnNsMap">Show tips on our map</button>
+        <button type="button" id="btnNsClose">Back to OutbreakXplr</button>
+      </div>
+      <iframe id="nsFrame" title="Nextstrain measles genome global" src="about:blank" allow="fullscreen" style="padding-top:40px;height:calc(100% - 0px)"></iframe>
+    </div>
     <div class="map-float view-toggle">
       <button id="btnUSA" class="active">USA</button>
       <button id="btnWorld">World</button>
@@ -406,6 +440,7 @@ const HD_HQS = [
 
 let allData = [], labs = [], filtered = [], sortKey = "date", sortDir = -1;
 let map, cluster, hdLayer, labLayer, activeTab = "rank";
+let nsTips = [], nsMeta = null;
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
@@ -450,13 +485,23 @@ async function boot() {
     }).bindPopup(`<b>${esc(h.name)}</b><br>${esc(h.city)}`).addTo(hdLayer);
   });
 
-  const [outbreaks, labsData, meta] = await Promise.all([
+  const [outbreaks, labsData, meta, nsData] = await Promise.all([
     loadJSON("data/outbreaks.json"),
     loadJSON("data/labs.json"),
-    loadJSON("data/meta.json")
+    loadJSON("data/meta.json"),
+    loadJSON("data/nextstrain-measles.json")
   ]);
   allData = Array.isArray(outbreaks) ? outbreaks : [];
   labs = Array.isArray(labsData) ? labsData : (labsData?.labs || []);
+  if (nsData && Array.isArray(nsData.tips)) {
+    nsTips = nsData.tips;
+    nsMeta = nsData.meta || {};
+    // Merge Nextstrain tips into searchable corpus (genomic points)
+    const existingNs = new Set(allData.filter(d => d.source === "Nextstrain").map(d => d.id));
+    nsTips.forEach(tip => {
+      if (!existingNs.has(tip.id)) allData.push(tip);
+    });
+  }
   if (meta?.finishedAt || meta?.generatedAt) {
     document.getElementById("updatedPill").textContent =
       "Updated " + new Date(meta.finishedAt || meta.generatedAt).toLocaleString();
@@ -498,6 +543,10 @@ function updateGlobalMetrics() {
   document.getElementById("mCurrent").textContent = current.length.toLocaleString();
   document.getElementById("mWW").textContent = ww.length.toLocaleString();
   document.getElementById("mCovid").textContent = covid.length.toLocaleString();
+  if (nsTips.length) {
+    document.getElementById("mMeaslesS").textContent =
+      document.getElementById("mMeaslesS").textContent + " · NS " + nsTips.length.toLocaleString() + " genomes";
+  }
 }
 
 function applyFilters() {
@@ -808,7 +857,8 @@ function setFeed(feed) {
   } else if (feed === "ww") {
     filtered = allData.filter(d => d.source === "WastewaterSCAN");
   } else if (feed === "nextstrain") {
-    filtered = allData.filter(d => d.source === "Nextstrain");
+    openNextstrain();
+    return;
   } else if (feed === "nors") {
     filtered = allData.filter(d => d.source === "CDC NORS");
   } else if (feed === "hdx") {
@@ -826,10 +876,48 @@ function setFeed(feed) {
   renderRight();
 }
 
+function openNextstrain() {
+  const wrap = document.getElementById("nsFrameWrap");
+  const frame = document.getElementById("nsFrame");
+  const metaEl = document.getElementById("nsMeta");
+  if (nsMeta) {
+    metaEl.textContent = (nsMeta.tipCount ? nsMeta.tipCount.toLocaleString() + " genomes · " : "") +
+      (nsMeta.updated ? "updated " + nsMeta.updated : "");
+  }
+  // Full interactive Auspice UI (same as nextstrain.org) inside our shell
+  if (!frame.src || frame.src === "about:blank") {
+    frame.src = "https://nextstrain.org/measles/genome/global";
+  }
+  wrap.classList.add("open");
+  document.querySelectorAll(".hdr-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === "nextstrain"));
+}
+
+function closeNextstrain() {
+  document.getElementById("nsFrameWrap").classList.remove("open");
+}
+
+function showNextstrainTipsOnMap() {
+  closeNextstrain();
+  document.getElementById("q").value = "";
+  // Filter to Nextstrain genomic tips only
+  filtered = allData.filter(d => d.source === "Nextstrain" && d.lat != null);
+  document.getElementById("mFilter").textContent = filtered.length.toLocaleString();
+  document.getElementById("mFilterS").textContent = "Nextstrain genome tips";
+  document.getElementById("tableCount").textContent = filtered.length.toLocaleString();
+  document.getElementById("btnWorld").click();
+  renderMarkers();
+  renderTable();
+  renderTrend();
+  renderRight();
+  map.setView([20, 0], 2);
+}
+
 function setMode(mode) {
   document.querySelectorAll(".hdr-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
   document.getElementById("q").value = "";
   document.getElementById("status").value = "";
+  if (mode === "nextstrain") { openNextstrain(); return; }
+  closeNextstrain();
   if (mode === "measles") document.getElementById("q").value = "measles";
   else if (mode === "covid") document.getElementById("q").value = "covid";
   else if (mode === "ww") { setFeed("ww"); return; }
@@ -913,6 +1001,8 @@ function bindUI() {
     };
   });
   window.addEventListener("resize", () => renderTrend());
+  document.getElementById("btnNsClose").onclick = closeNextstrain;
+  document.getElementById("btnNsMap").onclick = showNextstrainTipsOnMap;
 }
 
 boot();
