@@ -1,0 +1,43 @@
+name: Update Outbreak Data
+
+on:
+  schedule:
+    # Every hour at minute 15 (UTC). Adjust as needed for rate limits.
+    - cron: "15 * * * *"
+  workflow_dispatch: # manual run from Actions tab
+  push:
+    branches: [main]
+    paths:
+      - "scripts/fetch-outbreak-data.mjs"
+      - ".github/workflows/update-outbreak-data.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch public outbreak sources
+        run: node scripts/fetch-outbreak-data.mjs
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "outbreakxplr-bot"
+          git config user.email "outbreakxplr-bot@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "chore(data): refresh outbreak feeds $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
