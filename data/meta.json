@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-11-03T15:04:23.693Z",
-  "finishedAt": "2026-11-03T15:04:25.003Z",
+  "generatedAt": "2026-11-03T20:57:36.648Z",
+  "finishedAt": "2026-11-03T20:57:39.867Z",
   "totalRecords": 5894,
   "bySource": {
     "disease.sh": 64,
+    "Nextstrain": 1,
     "JHU Measles Tracker": 463,
     "Curated": 18,
-    "Nextstrain": 1,
     "WastewaterSCAN": 400,
     "WHO DON": 40,
     "CDC NNDSS": 400,
