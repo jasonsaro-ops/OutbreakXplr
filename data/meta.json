@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-11-10T17:45:49.759Z",
-  "finishedAt": "2026-11-10T17:45:55.051Z",
-  "totalRecords": 5986,
+  "generatedAt": "2026-11-10T23:15:06.386Z",
+  "finishedAt": "2026-11-10T23:15:17.016Z",
+  "totalRecords": 5586,
   "bySource": {
     "disease.sh": 64,
     "WHO DON": 40,
@@ -9,7 +9,6 @@
     "Nextstrain": 1,
     "WastewaterSCAN": 400,
     "Curated": 18,
-    "CDC NNDSS": 400,
     "HDX / WHO DON outbreaks": 3568,
     "WHO GHO": 79,
     "World Bank": 120,
@@ -17,10 +16,10 @@
     "Historical": 20
   },
   "byStatus": {
-    "current": 2349,
+    "current": 1949,
     "historical": 3637
   },
-  "measlesCount": 1089,
+  "measlesCount": 689,
   "covidCount": 1283,
   "sourcesIncorporated": {
     "WHO Disease Outbreak News API": "live pull",
