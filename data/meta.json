@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-11-16T01:59:11.758Z",
-  "finishedAt": "2026-11-16T01:59:22.449Z",
-  "totalRecords": 5205,
+  "generatedAt": "2026-11-16T09:33:40.703Z",
+  "finishedAt": "2026-11-16T09:33:43.827Z",
+  "totalRecords": 6005,
   "bySource": {
     "disease.sh": 64,
     "WHO DON": 40,
@@ -13,11 +13,12 @@
     "HDX / WHO DON outbreaks": 3568,
     "WHO GHO": 79,
     "World Bank": 120,
+    "CDC NORS": 800,
     "Historical": 20
   },
   "byStatus": {
     "current": 2368,
-    "historical": 2837
+    "historical": 3637
   },
   "measlesCount": 1108,
   "covidCount": 1283,
