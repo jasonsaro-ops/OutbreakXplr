@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-11-22T18:30:27.710Z",
-  "finishedAt": "2026-11-22T18:30:38.331Z",
-  "totalRecords": 5612,
+  "generatedAt": "2026-11-23T00:15:09.180Z",
+  "finishedAt": "2026-11-23T00:15:15.928Z",
+  "totalRecords": 6012,
   "bySource": {
     "disease.sh": 64,
     "Nextstrain": 1,
@@ -9,6 +9,7 @@
     "JHU Measles Tracker": 502,
     "WastewaterSCAN": 400,
     "Curated": 18,
+    "CDC NNDSS": 400,
     "HDX / WHO DON outbreaks": 3568,
     "WHO GHO": 79,
     "World Bank": 120,
@@ -16,10 +17,10 @@
     "Historical": 20
   },
   "byStatus": {
-    "current": 1975,
+    "current": 2375,
     "historical": 3637
   },
-  "measlesCount": 715,
+  "measlesCount": 1115,
   "covidCount": 1283,
   "sourcesIncorporated": {
     "WHO Disease Outbreak News API": "live pull",
